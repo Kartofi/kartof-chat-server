@@ -230,13 +230,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hello_world"
-version = "0.1.0"
-dependencies = [
- "rouille",
-]
-
-[[package]]
 name = "hermit-abi"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -300,6 +293,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "406cda4b368d531c842222cf9d2600a9a4acce8d29423695379c6868a143a9ee"
 dependencies = [
  "wasm-bindgen",
+]
+
+[[package]]
+name = "kartof-chat-server"
+version = "0.1.0"
+dependencies = [
+ "rouille",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
