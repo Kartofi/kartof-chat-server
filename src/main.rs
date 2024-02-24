@@ -35,24 +35,43 @@ use ws::listen;
 struct Payload {
     from: String,
     message: String,
+    time: u64,
 }
 fn main() {
     let _ = listen("127.0.0.1:3012", |out| {
-        let s: String = rand::thread_rng()
+        let name: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(7)
             .map(char::from)
             .collect();
+        out.send(name.clone()).unwrap();
+
         move |msg: Message| {
             println!("{}", msg.to_string());
-            let json: Payload = serde_json::from_str(&msg.to_string()).expect("msg");
-            let data: Payload = Payload {
-                from: s.clone().to_owned(),
-                message: json.message.to_owned(),
-            };
-            let string_json: String = serde_json::to_string(&data).expect("msg");
-            out.broadcast(string_json);
-            Ok(())
+
+            if msg.clone().to_string() == "\"\"".to_string() {
+                out.send(name.clone()).unwrap();
+                return Ok(());
+            } else {
+                let json: Payload = serde_json::from_str(&msg.to_string()).expect("msg");
+
+                let start = SystemTime::now();
+                let since_the_epoch: std::time::Duration = start
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards");
+                let timestamp: u64 = since_the_epoch.as_secs();
+
+                let data: Payload = Payload {
+                    from: name.to_owned(),
+                    message: json.message.to_owned(),
+                    time: timestamp,
+                };
+
+                let string_json: String = serde_json::to_string(&data).expect("msg");
+                out.send(name.clone()).unwrap();
+                out.broadcast(string_json).unwrap();
+                Ok(())
+            }
         }
     });
     println!("Started listening on {}", PORT);
