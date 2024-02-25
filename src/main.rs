@@ -35,8 +35,13 @@ use ws::listen;
 struct Payload {
     from: String,
     message: String,
+    file_data: String,
+    file_type: String,
     time: u64,
 }
+
+static MAX_MESSAGE_SIZE: usize = 10000000;
+
 fn main() {
     let _ = listen("127.0.0.1:3012", |out| {
         let name: String = rand::thread_rng()
@@ -47,7 +52,10 @@ fn main() {
         out.send(name.clone()).unwrap();
 
         move |msg: Message| {
-            println!("{}", msg.to_string());
+            println!("Got Message");
+            if msg.to_string().len() > MAX_MESSAGE_SIZE {
+                return Ok(());
+            }
 
             if msg.clone().to_string() == "\"\"".to_string() {
                 out.send(name.clone()).unwrap();
@@ -64,11 +72,15 @@ fn main() {
                 let data: Payload = Payload {
                     from: name.to_owned(),
                     message: json.message.to_owned(),
+                    file_type: json.file_type.to_owned(),
+                    file_data: json.file_data.to_owned(),
                     time: timestamp,
                 };
-
+                if json.message.len() <= 0 {
+                    return Ok(());
+                }
                 let string_json: String = serde_json::to_string(&data).expect("msg");
-                out.send(name.clone()).unwrap();
+
                 out.broadcast(string_json).unwrap();
                 Ok(())
             }
