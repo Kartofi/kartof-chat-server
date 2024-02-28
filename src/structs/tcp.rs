@@ -10,7 +10,7 @@ use std::{
 
 use ws::{CloseCode, Error, Handler, Message, Result, Sender};
 
-static MAX_MESSAGE_SIZE: usize = 10000000;
+static MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Payload {
@@ -76,7 +76,7 @@ impl Handler for Server {
                 file_data: payload.file_data.to_owned(),
                 time: timestamp,
             };
-            if payload.message.len() <= 0 {
+            if payload.message.len() <= 0 && payload.file_data.len() <= 0 {
                 return Ok(());
             }
             let string_json: String = serde_json::to_string(&data).expect("msg");
