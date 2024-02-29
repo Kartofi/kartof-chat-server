@@ -4,6 +4,7 @@ use rouille::router;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use std::fs;
@@ -30,10 +31,16 @@ use ws::listen;
 mod structs;
 
 fn main() {
+    let users: Vec<String> = Vec::new();
+
+    let mutex = Mutex::new(users);
+
+    let arc = Arc::new(mutex);
+
     let _ = listen("127.0.0.1:3012", |out| structs::tcp::Server {
         out: out,
         name: "".to_string(),
-        clients: vec![],
+        clients: arc.clone(),
     });
 
     println!("Started listening on {}", PORT);

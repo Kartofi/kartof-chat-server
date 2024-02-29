@@ -3,28 +3,33 @@ use rand::{distributions::Alphanumeric, Rng}; // 0.8
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use std::sync::{Arc, Mutex};
 use std::{
     ptr::null,
     time::{SystemTime, UNIX_EPOCH},
 };
-
 use ws::{CloseCode, Error, Handler, Message, Result, Sender};
 
 static MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024;
 
 #[derive(Clone, Serialize, Deserialize)]
-struct Payload {
+struct ClientMessage {
     from: String,
     message: String,
     file_data: String,
     file_type: String,
     time: u64,
 }
-
+#[derive(Clone, Serialize, Deserialize)]
+struct Request {
+    request: String,
+    name: String,
+    users: Vec<String>,
+}
 pub struct Server {
     pub out: Sender,
     pub name: String,
-    pub clients: Vec<String>,
+    pub clients: Arc<Mutex<Vec<String>>>,
 }
 impl Handler for Server {
     fn on_open(&mut self, shake: ws::Handshake) -> Result<()> {
@@ -34,15 +39,45 @@ impl Handler for Server {
             .map(char::from)
             .collect();
         self.name = name.clone();
-        self.out.send(self.name.clone()).unwrap();
-        self.clients.push(name);
+
+        let mut clients = self.clients.lock().unwrap();
+        clients.push(name);
+
+        println!("{}", clients.join(", "));
+
+        let string_json: String = serde_json::to_string(&Request {
+            request: "get_name".to_string(),
+            name: self.name.clone(),
+            users: clients.clone(),
+        })
+        .expect("msg");
+
+        self.out.broadcast(string_json).unwrap();
         Ok(())
     }
     fn on_close(&mut self, _: CloseCode, _: &str) {
-        self.clients.retain(|x| x.to_string() != self.name);
+        let mut clients = self.clients.lock().unwrap();
+        clients.retain(|x| x.to_string() != self.name);
+        let string_json: String = serde_json::to_string(&Request {
+            request: "get_name".to_string(),
+            name: self.name.clone(),
+            users: clients.clone(),
+        })
+        .expect("msg");
+
+        self.out.broadcast(string_json).unwrap();
     }
     fn on_error(&mut self, _: Error) {
-        self.clients.retain(|x| x.to_string() != self.name);
+        let mut clients = self.clients.lock().unwrap();
+        clients.retain(|x| x.to_string() != self.name);
+        let string_json: String = serde_json::to_string(&Request {
+            request: "get_name".to_string(),
+            name: self.name.clone(),
+            users: clients.clone(),
+        })
+        .expect("msg");
+
+        self.out.broadcast(string_json).unwrap();
     }
     fn on_message(&mut self, msg: Message) -> Result<()> {
         println!("Got Message from {}", self.name);
@@ -52,11 +87,19 @@ impl Handler for Server {
         let json: Value = serde_json::from_str(&msg.to_string()).expect("msg");
         if let Some(field) = json.get("request") {
             if field == "get_name" {
-                self.out.send(self.name.clone()).unwrap();
+                let mut clients = self.clients.lock().unwrap();
+                let string_json: String = serde_json::to_string(&Request {
+                    request: "get_name".to_string(),
+                    name: self.name.clone(),
+                    users: clients.clone(),
+                })
+                .expect("msg");
+
+                self.out.send(string_json).unwrap();
             }
             return Ok(());
         } else {
-            let payload: Payload = Payload {
+            let payload: ClientMessage = ClientMessage {
                 from: "".to_string(),
                 message: json["message"].as_str().unwrap_or_default().to_string(),
                 file_data: json["file_data"].as_str().unwrap_or_default().to_string(),
@@ -69,7 +112,7 @@ impl Handler for Server {
                 .expect("Time went backwards");
             let timestamp: u64 = since_the_epoch.as_secs();
 
-            let data: Payload = Payload {
+            let data: ClientMessage = ClientMessage {
                 from: self.name.to_owned(),
                 message: payload.message.to_owned(),
                 file_type: payload.file_type.to_owned(),
