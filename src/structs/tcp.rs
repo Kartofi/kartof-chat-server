@@ -1,11 +1,10 @@
 use rand::{distributions::Alphanumeric, Rng}; // 0.8
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value};
 
 use std::sync::{Arc, Mutex};
 use std::{
-    ptr::null,
     time::{SystemTime, UNIX_EPOCH},
 };
 use ws::{CloseCode, Error, Handler, Message, Result, Sender};
@@ -32,7 +31,7 @@ pub struct Server {
     pub clients: Arc<Mutex<Vec<String>>>,
 }
 impl Handler for Server {
-    fn on_open(&mut self, shake: ws::Handshake) -> Result<()> {
+    fn on_open(&mut self, _shake: ws::Handshake) -> Result<()> {
         let name: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(7)
@@ -87,7 +86,7 @@ impl Handler for Server {
         let json: Value = serde_json::from_str(&msg.to_string()).expect("msg");
         if let Some(field) = json.get("request") {
             if field == "get_name" {
-                let mut clients = self.clients.lock().unwrap();
+                let clients = self.clients.lock().unwrap();
                 let string_json: String = serde_json::to_string(&Request {
                     request: "get_name".to_string(),
                     name: self.name.clone(),
