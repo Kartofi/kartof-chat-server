@@ -1,12 +1,10 @@
 use rand::{distributions::Alphanumeric, Rng}; // 0.8
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value};
+use serde_json::Value;
 
 use std::sync::{Arc, Mutex};
-use std::{
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 use ws::{CloseCode, Error, Handler, Message, Result, Sender};
 
 static MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024;
@@ -21,14 +19,18 @@ struct ClientMessage {
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Request {
-    request: String,
-    name: String,
-    users: Vec<String>,
+    request: RequestTypes,
+    name: Option<String>,
+    users: Option<Vec<String>>,
 }
 pub struct Server {
     pub out: Sender,
     pub name: String,
     pub clients: Arc<Mutex<Vec<String>>>,
+}
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+enum RequestTypes {
+    GetName = 1,
 }
 impl Handler for Server {
     fn on_open(&mut self, _shake: ws::Handshake) -> Result<()> {
@@ -42,12 +44,10 @@ impl Handler for Server {
         let mut clients = self.clients.lock().unwrap();
         clients.push(name);
 
-        println!("{}", clients.join(", "));
-
         let string_json: String = serde_json::to_string(&Request {
-            request: "get_name".to_string(),
-            name: self.name.clone(),
-            users: clients.clone(),
+            request: RequestTypes::GetName,
+            name: Some(self.name.clone()),
+            users: Some(clients.clone()),
         })
         .expect("msg");
 
@@ -58,9 +58,9 @@ impl Handler for Server {
         let mut clients = self.clients.lock().unwrap();
         clients.retain(|x| x.to_string() != self.name);
         let string_json: String = serde_json::to_string(&Request {
-            request: "get_name".to_string(),
-            name: self.name.clone(),
-            users: clients.clone(),
+            request: RequestTypes::GetName,
+            name: Some(self.name.clone()),
+            users: Some(clients.clone()),
         })
         .expect("msg");
 
@@ -70,9 +70,9 @@ impl Handler for Server {
         let mut clients = self.clients.lock().unwrap();
         clients.retain(|x| x.to_string() != self.name);
         let string_json: String = serde_json::to_string(&Request {
-            request: "get_name".to_string(),
-            name: self.name.clone(),
-            users: clients.clone(),
+            request: RequestTypes::GetName,
+            name: Some(self.name.clone()),
+            users: Some(clients.clone()),
         })
         .expect("msg");
 
@@ -85,12 +85,14 @@ impl Handler for Server {
         }
         let json: Value = serde_json::from_str(&msg.to_string()).expect("msg");
         if let Some(field) = json.get("request") {
-            if field == "get_name" {
+            let req: Request = serde_json::from_str(&msg.to_string()).expect("msg");
+
+            if req.request == RequestTypes::GetName {
                 let clients = self.clients.lock().unwrap();
                 let string_json: String = serde_json::to_string(&Request {
-                    request: "get_name".to_string(),
-                    name: self.name.clone(),
-                    users: clients.clone(),
+                    request: RequestTypes::GetName,
+                    name: Some(self.name.clone()),
+                    users: Some(clients.clone()),
                 })
                 .expect("msg");
 
@@ -98,30 +100,24 @@ impl Handler for Server {
             }
             return Ok(());
         } else {
-            let payload: ClientMessage = ClientMessage {
-                from: "".to_string(),
-                message: json["message"].as_str().unwrap_or_default().to_string(),
-                file_data: json["file_data"].as_str().unwrap_or_default().to_string(),
-                file_type: json["file_type"].as_str().unwrap_or_default().to_string(),
-                time: 0,
-            };
             let start = SystemTime::now();
             let since_the_epoch: std::time::Duration = start
                 .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards");
             let timestamp: u64 = since_the_epoch.as_secs();
 
-            let data: ClientMessage = ClientMessage {
+            let payload: ClientMessage = ClientMessage {
                 from: self.name.to_owned(),
-                message: payload.message.to_owned(),
-                file_type: payload.file_type.to_owned(),
-                file_data: payload.file_data.to_owned(),
+                message: json["message"].as_str().unwrap_or_default().to_string(),
+                file_data: json["file_data"].as_str().unwrap_or_default().to_string(),
+                file_type: json["file_type"].as_str().unwrap_or_default().to_string(),
                 time: timestamp,
             };
+
             if payload.message.len() <= 0 && payload.file_data.len() <= 0 {
                 return Ok(());
             }
-            let string_json: String = serde_json::to_string(&data).expect("msg");
+            let string_json: String = serde_json::to_string(&payload).expect("msg");
 
             self.out.broadcast(string_json).unwrap();
             Ok(())
