@@ -1,9 +1,9 @@
-use flate2::bufread::GzDecoder;
+use flate2::bufread::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 
 use std::io::prelude::*;
-use std::io::{Error, Read};
+use std::io::{Error, ErrorKind, Read};
 pub fn compress(input: &str) -> Result<String, std::io::Error> {
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
     encoder.write_all(input.as_bytes())?;
@@ -15,10 +15,18 @@ pub fn compress(input: &str) -> Result<String, std::io::Error> {
     Ok(base64_str)
 }
 
-pub fn decompress(input: &str) -> Result<String, Error> {
-    let mut d = GzDecoder::new("...".as_bytes());
-    let mut s = String::new();
-    d.read_to_string(&mut s);
+pub fn decompress(input: &[u8]) -> Result<String, Error> {
+    let mut d = ZlibDecoder::new(input);
 
-    Ok(s)
+    let mut s = String::new();
+    match d.read_to_string(&mut s) {
+        Ok(_) => Ok(s),
+        Err(e) => {
+            if e.kind() == ErrorKind::InvalidInput {
+                Err(Error::new(ErrorKind::InvalidData, "Corrupt zlib stream"))
+            } else {
+                Err(e)
+            }
+        }
+    }
 }
