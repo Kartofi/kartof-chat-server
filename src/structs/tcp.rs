@@ -3,6 +3,10 @@ use rand::{distributions::Alphanumeric, Rng}; // 0.8
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::structs::data_processing::{self, decompress};
+
+use std::default;
+use std::ptr::null;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use ws::{CloseCode, Error, Handler, Message, Result, Sender};
@@ -81,9 +85,20 @@ impl Handler for Server {
     fn on_message(&mut self, msg: Message) -> Result<()> {
         println!("Got Message from {}", self.name);
         if msg.to_string().len() > MAX_MESSAGE_SIZE {
+            println!("Message is too large");
             return Ok(());
         }
-        let json: Value = serde_json::from_str(&msg.to_string()).expect("msg");
+
+        let json_result = serde_json::from_str(&msg.to_string());
+
+        let json: Value = match json_result {
+            Ok(data) => data,
+            Err(error) => Value::default(),
+        };
+        if json == Value::default() {
+            println!("Invalid json!");
+            return Ok(());
+        }
         if let Some(field) = json.get("request") {
             let req: Request = serde_json::from_str(&msg.to_string()).expect("msg");
 
