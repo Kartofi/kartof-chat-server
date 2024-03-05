@@ -36,6 +36,28 @@ pub struct Server {
 enum RequestTypes {
     GetName = 1,
 }
+
+fn decompress_err_handle(string_msg: String) -> String {
+    let compressed_bytes: Vec<u8> = match base64::decode(string_msg) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln!("Base64 decoding error: {}", e);
+            Vec::new()
+        }
+    };
+    if compressed_bytes.len() == 0 {
+        println!("Invalid compressed data!");
+        return String::default();
+    }
+    let decompressed_result: std::prelude::v1::Result<String, std::io::Error> =
+        decompress(&compressed_bytes);
+    let decompressed: String = match decompressed_result {
+        Ok(data) => data,
+        Err(error) => String::default(),
+    };
+    return decompressed;
+}
+
 impl Handler for Server {
     fn on_open(&mut self, _shake: ws::Handshake) -> Result<()> {
         let name: String = rand::thread_rng()
@@ -88,29 +110,9 @@ impl Handler for Server {
             println!("Message is too large");
             return Ok(());
         }
-        let compressed_bytes: Vec<u8> = match base64::decode(&msg.clone().to_string()) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                eprintln!("Base64 decoding error: {}", e);
-                Vec::new() // Exit the function if decoding fails
-            }
-        };
-        if compressed_bytes.len() == 0 {
-            println!("Invalid compressed data!");
-            return Ok(());
-        }
-        let decompressed_result: std::prelude::v1::Result<String, std::io::Error> =
-            decompress(&compressed_bytes);
-        let decompressed: String = match decompressed_result {
-            Ok(data) => data,
-            Err(error) => String::default(),
-        };
+        let msg_string: String = msg.to_string();
 
-        if decompressed == String::default() {
-            println!("Invalid compressed data!");
-            return Ok(());
-        }
-        let json_result = serde_json::from_str(&decompressed);
+        let json_result = serde_json::from_str(&msg_string);
 
         let json: Value = match json_result {
             Ok(data) => data,
@@ -121,7 +123,7 @@ impl Handler for Server {
             return Ok(());
         }
         if let Some(field) = json.get("request") {
-            let req: Request = serde_json::from_str(&decompressed).expect("msg");
+            let req: Request = serde_json::from_str(&msg_string).expect("msg");
 
             if req.request == RequestTypes::GetName {
                 let clients = self.clients.lock().unwrap();
@@ -131,8 +133,7 @@ impl Handler for Server {
                     users: Some(clients.clone()),
                 })
                 .expect("msg");
-                let compressed: String = compress(&string_json).unwrap();
-                self.out.send(compressed).unwrap();
+                self.out.send(string_json).unwrap();
             }
             return Ok(());
         } else {
@@ -154,8 +155,7 @@ impl Handler for Server {
                 return Ok(());
             }
             let string_json: String = serde_json::to_string(&payload).expect("msg");
-            let compressed: String = compress(&string_json).unwrap();
-            self.out.broadcast(compressed).unwrap();
+            self.out.broadcast(string_json).unwrap();
             Ok(())
         }
     }
